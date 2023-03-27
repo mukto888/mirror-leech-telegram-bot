@@ -19,7 +19,7 @@ TELEGRAPH_LIMIT = 300
 
 
 async def initiate_search_tools():
-    qbclient = get_client()
+    qbclient = await sync_to_async(get_client)
     qb_plugins = await sync_to_async(qbclient.search_plugins)
     if SEARCH_PLUGINS := config_dict['SEARCH_PLUGINS']:
         globals()['PLUGINS'] = []
@@ -28,7 +28,6 @@ async def initiate_search_tools():
             for plugin in qb_plugins:
                 await sync_to_async(qbclient.search_uninstall_plugin, names=plugin['name'])
         await sync_to_async(qbclient.search_install_plugin, src_plugins)
-        await sync_to_async(qbclient.auth_log_out)
     elif qb_plugins:
         for plugin in qb_plugins:
             await sync_to_async(qbclient.search_uninstall_plugin, names=plugin['name'])
@@ -89,7 +88,7 @@ async def __search(key, site, message, method):
             return
     else:
         LOGGER.info(f"PLUGINS Searching: {key} from {site}")
-        client = get_client()
+        client = await sync_to_async(get_client)
         search = await sync_to_async(client.search_start, pattern=key, plugins=site, category='all')
         search_id = search.id
         while True:
@@ -105,14 +104,14 @@ async def __search(key, site, message, method):
             return
         msg = f"<b>Found {min(total_results, TELEGRAPH_LIMIT)}</b>"
         msg += f" <b>result(s) for <i>{key}</i>\nTorrent Site:- <i>{site.capitalize()}</i></b>"
+        await sync_to_async(client.search_delete, search_id=search_id)
+        await sync_to_async(client.auth_log_out)
     link = await __getResult(search_results, key, message, method)
     buttons = ButtonMaker()
     buttons.ubutton("🔎 VIEW", link)
     button = buttons.build_menu(1)
     await editMessage(message, msg, button)
-    if not method.startswith('api'):
-        await sync_to_async(client.search_delete, search_id=search_id)
-
+        
 async def __getResult(search_results, key, message, method):
     telegraph_content = []
     if method == 'apirecent':
@@ -191,7 +190,7 @@ def __api_buttons(user_id, method):
 async def __plugin_buttons(user_id):
     buttons = ButtonMaker()
     if not PLUGINS:
-        qbclient = get_client()
+        qbclient = await sync_to_async(get_client)
         pl = await sync_to_async(qbclient.search_plugins)
         for name in pl:
             PLUGINS.append(name['name'])
@@ -238,7 +237,7 @@ async def torrentSearchUpdate(client, query):
     key = key[1].strip() if len(key) > 1 else None
     data = query.data.split()
     if user_id != int(data[1]):
-        await query.answer("Not Yours!", alert=True)
+        await query.answer("Not Yours!", show_alert=True)
     elif data[2].startswith('api'):
         await query.answer()
         button = __api_buttons(user_id, data[2])
